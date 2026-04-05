@@ -127,7 +127,7 @@ function setButtonIcon(themeName) {
   } else {
     themeBtn.innerHTML = moonSVG;
     themeBtn.querySelectorAll('*').forEach(el => {
-      el.setAttribute('fill', 'blue');
+      el.setAttribute('fill', 'white');
       el.setAttribute('opacity', '0.8'); // transparency
     });
   }

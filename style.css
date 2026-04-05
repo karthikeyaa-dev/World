@@ -31,8 +31,8 @@ body, html {
 
 /* SVG icons inside button */
 #theme-toggle svg {
-  width: 50px;        /* larger icon */
-  height: 50px;
+  width: 45px;        /* larger icon */
+  height: 45px;
   opacity: 0.85;      /* slight transparency */
   transition: transform 0.3s ease, opacity 0.3s ease;
   filter: url(#texture); /* optional texture filter */
@@ -40,6 +40,6 @@ body, html {
 
 /* Hover effect */
 #theme-toggle:hover svg {
-  transform: scale(1.2);
+  transform: scale(1.0);
   opacity: 1;         /* fully visible on hover */
 }
