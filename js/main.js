@@ -1,6 +1,9 @@
 // ===== main.js =====
 import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
 import { initInteraction } from './interaction.js';
+import { loadEvents, animateEvents } from './events.js';
+import { initZoom, enableSmoothZoom } from './zoom.js';
+import { initDrag, updateAutoRotate } from './drag.js';
 
 const container = document.getElementById('globe-container');
 const themeBtn = document.getElementById('theme-toggle');
@@ -8,19 +11,17 @@ const themeBtn = document.getElementById('theme-toggle');
 // Scene
 const scene = new THREE.Scene();
 
-// Themes
+// Themes (keep colors for globe only)
 const themes = {
   light: {
-    background: '#000000',
     oceanColor: '#8CCDEB',
     landColor: '#FCECDD',
     borderColor: '#8CCDEB',
   },
   dark: {
-    background: 0x000000,
-    oceanColor: '#696969',
-    landColor: '#242424',
-    borderColor: '#696969',
+    oceanColor: '#1a1a2e',
+    landColor: '#2a2a3e',
+    borderColor: '#4a4a5e',
   }
 };
 
@@ -30,29 +31,50 @@ let currentTheme = localStorage.getItem('theme') || 'dark';
 const sizes = { width: window.innerWidth, height: window.innerHeight };
 
 // Camera
-const camera = new THREE.PerspectiveCamera(45, sizes.width / sizes.height, 1, 100);
-camera.position.set(0, 0, 6);
+const camera = new THREE.PerspectiveCamera(45, sizes.width / sizes.height, 0.1, 1000);
+camera.position.set(0, 0, 15);
 
-// Renderer
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+// ✅ Renderer (GLASS ENABLED)
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  alpha: true // ⭐ IMPORTANT
+});
+
 renderer.setSize(sizes.width, sizes.height);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.NoToneMapping;
+
+// ✅ Transparent background
+renderer.setClearColor(0x000000, 0);
+scene.background = null;
+
 container.appendChild(renderer.domElement);
 
 // Lights
-scene.add(new THREE.AmbientLight(0xffffff, 1));
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+directionalLight.position.set(5, 10, 7);
+scene.add(directionalLight);
+
+const backLight = new THREE.DirectionalLight(0xffffff, 0.3);
+backLight.position.set(-5, -5, -7);
+scene.add(backLight);
 
 // Globe group
 const globeGroup = new THREE.Group();
 scene.add(globeGroup);
 
-const globeRadius = 2;
+const globeRadius = 5.0;
 let globeMesh = null;
-let geoData = null; // ✅ cache geojson
+let geoData = null;
+let eventsInitialized = false;
 
-// ===== Load GeoJSON ONCE =====
+// Controls
+initDrag(globeGroup, camera, { rotationSpeed: 0.005 });
+initZoom(camera, { minZoom: 1, maxZoom: 25, zoomSpeed: 0.08 });
+enableSmoothZoom(0.15);
+
+// ===== Load GeoJSON =====
 async function loadGeoData() {
   const res = await fetch('assets/countries.geo.json');
   geoData = await res.json();
@@ -65,7 +87,7 @@ async function loadSVGs() {
   moonSVG = await (await fetch('assets/moon.svg')).text();
 }
 
-// ===== Create Texture =====
+// ===== Create Globe Texture =====
 function createTexture(theme) {
   const canvas = document.createElement('canvas');
   canvas.width = 4096;
@@ -77,7 +99,7 @@ function createTexture(theme) {
 
   ctx.fillStyle = theme.landColor;
   ctx.strokeStyle = theme.borderColor;
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 2;
 
   function drawRing(ring) {
     ctx.beginPath();
@@ -91,28 +113,20 @@ function createTexture(theme) {
     ctx.stroke();
   }
 
-  geoData.features.forEach(feature => {
-    const geom = feature.geometry;
-
-    if (geom.type === 'Polygon') {
-      geom.coordinates.forEach(drawRing);
-    } else {
-      geom.coordinates.forEach(p => p.forEach(drawRing));
-    }
+  geoData.features.forEach(f => {
+    const g = f.geometry;
+    if (g.type === 'Polygon') g.coordinates.forEach(drawRing);
+    else g.coordinates.forEach(p => p.forEach(drawRing));
   });
 
   const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.needsUpdate = true; // ✅ important
-
+  texture.needsUpdate = true;
   return texture;
 }
 
 // ===== Init Globe =====
-function initGlobe(themeName) {
-  const theme = themes[themeName];
-
-  const texture = createTexture(theme);
+async function initGlobe(themeName) {
+  const texture = createTexture(themes[themeName]);
 
   if (globeMesh) {
     globeGroup.remove(globeMesh);
@@ -121,13 +135,17 @@ function initGlobe(themeName) {
   }
 
   globeMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(globeRadius, 256, 256),
-    new THREE.MeshBasicMaterial({ map: texture })
+    new THREE.SphereGeometry(globeRadius, 128, 128),
+    new THREE.MeshStandardMaterial({ map: texture })
   );
 
   globeGroup.add(globeMesh);
 
-  // ✅ Update interaction with new mesh
+  if (!eventsInitialized) {
+    await loadEvents(globeGroup, globeRadius, camera, renderer, scene);
+    eventsInitialized = true;
+  }
+
   initInteraction(scene, camera, globeMesh);
 }
 
@@ -137,27 +155,21 @@ function setButtonIcon(themeName) {
     themeBtn.innerHTML = sunSVG;
     themeBtn.querySelectorAll('*').forEach(el => {
       el.setAttribute('fill', 'orange');
-      el.setAttribute('opacity', '0.8');
     });
   } else {
     themeBtn.innerHTML = moonSVG;
     themeBtn.querySelectorAll('*').forEach(el => {
       el.setAttribute('fill', 'white');
-      el.setAttribute('opacity', '0.8');
     });
   }
 }
 
 // ===== Apply Theme =====
 function applyTheme(themeName) {
-  scene.background = new THREE.Color(themes[themeName].background);
-  renderer.setClearColor(themes[themeName].background, 1);
-
   initGlobe(themeName);
 
   currentTheme = themeName;
   localStorage.setItem('theme', themeName);
-
   setButtonIcon(themeName);
 }
 
@@ -167,30 +179,19 @@ themeBtn.addEventListener('click', () => {
 });
 
 // ===== INIT =====
-await Promise.all([
-  loadGeoData(),  // ✅ load once
-  loadSVGs()
-]);
-
-applyTheme(currentTheme);
-
-// Resize
-window.addEventListener('resize', () => {
-  sizes.width = window.innerWidth;
-  sizes.height = window.innerHeight;
-
-  camera.aspect = sizes.width / sizes.height;
-  camera.updateProjectionMatrix();
-
-  renderer.setSize(sizes.width, sizes.height);
-});
-
-// Animation
-let rotationSpeed = 0.002;
+async function init() {
+  await loadGeoData();
+  await loadSVGs();
+  await initGlobe(currentTheme);
+  setButtonIcon(currentTheme);
+  animate();
+}
 
 function animate() {
   requestAnimationFrame(animate);
-  globeGroup.rotation.y += rotationSpeed;
+  updateAutoRotate(performance.now());
+  if (animateEvents) animateEvents();
   renderer.render(scene, camera);
 }
-animate();
+
+init();

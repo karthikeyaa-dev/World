@@ -12,34 +12,44 @@ body, html {
   height: 100%;
 }
 
-/* Theme toggle button — only SVG, no background */
+body {
+  margin: 0;
+  overflow: hidden;
+
+  /* ⭐ THIS MAKES GLASS VISIBLE */
+  background: radial-gradient(circle at top right, #1a1a2e, #000000);
+}
+
 #theme-toggle {
   position: absolute;
   top: 20px;
-  right: 20px;    /* top-right */
+  right: 20px;
   z-index: 10;
 
-  border: none;
-  background: none;
+  padding: 10px;
+  border-radius: 16px;
+
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+
+  border: 1px solid rgba(255, 255, 255, 0.2);
+
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 0 10px rgba(255, 255, 255, 0.1);
+
   cursor: pointer;
-  padding: 0;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  transition: all 0.3s ease;
 }
 
-/* SVG icons inside button */
 #theme-toggle svg {
-  width: 45px;        /* larger icon */
-  height: 45px;
-  opacity: 0.85;      /* slight transparency */
-  transition: transform 0.3s ease, opacity 0.3s ease;
-  filter: url(#texture); /* optional texture filter */
+  width: 42px;
+  height: 42px;
+  opacity: 0.9;
 }
 
-/* Hover effect */
-#theme-toggle:hover svg {
-  transform: scale(1.0);
-  opacity: 1;         /* fully visible on hover */
+#theme-toggle:hover {
+  transform: scale(1.08);
+  background: rgba(255, 255, 255, 0.15);
 }
